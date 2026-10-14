@@ -1,5 +1,13 @@
 import { db } from './firebase';
-import { collection, getDocs, doc, setDoc, deleteField } from 'firebase/firestore';
+import { 
+  collection, 
+  getDocs, 
+  doc, 
+  setDoc, 
+  deleteField, 
+  query, 
+  where 
+} from 'firebase/firestore';
 import { Colaborador } from '@/types/colaborador';
 import {
   cpfValido,
@@ -32,15 +40,36 @@ function mapearColaborador(id: string, dados: Record<string, unknown>): Colabora
   };
 }
 
-export async function listarColaboradores(forcarAtualizacao = false): Promise<Colaborador[]> {
+export async function listarColaboradores(
+  forcarAtualizacao = false,
+  filiaisPermitidas: string[] = [],
+  podeVerTodas = true
+): Promise<Colaborador[]> {
   if (cacheColaboradores && !forcarAtualizacao) {
     return cacheColaboradores;
   }
 
-  const snapshot = await getDocs(collection(db, 'colaboradores'));
-  const lista = snapshot.docs.map((d) => mapearColaborador(d.id, d.data()));
+  const colecaoRef = collection(db, 'colaboradores');
+  let q;
 
+  // Se o usuário puder ver todas ou tiver 'TODAS', consulta a coleção inteira
+  if (podeVerTodas || filiaisPermitidas.includes('TODAS')) {
+    q = colecaoRef;
+  } else if (filiaisPermitidas.length > 0) {
+    // Busca no Firestore apenas documentos onde matriz_filial esteja no array de permissões
+    // O operador 'in' aceita até 30 valores no Firestore
+    q = query(colecaoRef, where('matriz_filial', 'in', filiaisPermitidas));
+  } else {
+    // Sem filial permitida cadastrada: não consome leituras desnecessárias
+    cacheColaboradores = [];
+    ultimaSincronizacao = new Date();
+    return [];
+  }
+
+  const snapshot = await getDocs(q);
+  const lista = snapshot.docs.map((d) => mapearColaborador(d.id, d.data()));
   lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
   cacheColaboradores = lista;
   ultimaSincronizacao = new Date();
   return lista;
@@ -49,7 +78,6 @@ export async function listarColaboradores(forcarAtualizacao = false): Promise<Co
 export async function salvarColaborador(dados: Partial<Colaborador> & { id?: string | number }): Promise<Colaborador> {
   const idDocumento = String(dados.id || Date.now());
   const lista = await listarColaboradores();
-
   const existente = lista.find((c) => String(c.id) === idDocumento) || ({} as Partial<Colaborador>);
   const isNovo = !existente.id;
 

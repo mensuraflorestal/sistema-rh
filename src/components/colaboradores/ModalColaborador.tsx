@@ -14,6 +14,7 @@ import {
   Calendar,
   DollarSign
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ModalColaboradorProps {
   colaborador: Colaborador | null;
@@ -39,6 +40,11 @@ type Aba = 'contrato' | 'pessoal' | 'documentos' | 'endereco' | 'banco' | 'saude
 
 export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatus }: ModalColaboradorProps) {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('contrato');
+
+
+  const { temPermissao } = useAuth();
+  const podeVerSalario = temPermissao(['admin', 'rh_gestor']);
+  const podeEditar = temPermissao(['admin', 'rh_gestor']);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -98,8 +104,8 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
               key={id}
               onClick={() => setAbaAtiva(id as Aba)}
               className={`flex items-center gap-1.5 py-3 px-3 border-b-2 whitespace-nowrap transition-colors cursor-pointer ${abaAtiva === id
-                  ? 'border-emerald-600 text-emerald-700 font-semibold'
-                  : 'border-transparent hover:text-slate-900 hover:border-slate-300'
+                ? 'border-emerald-600 text-emerald-700 font-semibold'
+                : 'border-transparent hover:text-slate-900 hover:border-slate-300'
                 }`}
             >
               <Icone className="w-3.5 h-3.5" />
@@ -155,12 +161,18 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
                 <span className="font-medium text-slate-900">{colaborador.jornada || '-'}</span>
               </div>
               <div>
-                <span className="text-xs text-slate-500 block">Remuneração Base</span>
-                <span className="font-semibold text-emerald-700">
-                  {colaborador.salario
-                    ? Number(colaborador.salario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                    : '-'}
-                </span>
+                <span className="text-xs text-slate-500 font-medium block">Remuneração Base</span>
+                {podeVerSalario ? (
+                  <span className="text-sm font-semibold text-emerald-700">
+                    {colaborador.salario
+                      ? colaborador.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                      : '-'}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">
+                    Restrito à gestão
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -380,28 +392,33 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
         </div>
 
         {/* Rodapé */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (aoMudarStatus && colaborador) aoMudarStatus(colaborador);
-              }}
-              className="px-3.5 py-2 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
-            >
-              Alterar Situação
-            </button>
-            <button
-              onClick={() => {
-                if (aoEditar && colaborador) aoEditar(colaborador);
-              }}
-              className="px-3.5 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors cursor-pointer"
-            >
-              Editar Cadastro
-            </button>
+            {podeEditar && (
+              <>
+                {aoMudarStatus && (
+                  <button
+                    onClick={() => aoMudarStatus(colaborador)}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 cursor-pointer"
+                  >
+                    Alterar Situação
+                  </button>
+                )}
+                {aoEditar && (
+                  <button
+                    onClick={() => aoEditar(colaborador)}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                  >
+                    Editar Cadastro
+                  </button>
+                )}
+              </>
+            )}
           </div>
+
           <button
             onClick={aoFechar}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"
           >
             Fechar
           </button>
