@@ -21,8 +21,7 @@ export async function listarCargos(forcarAtualizacao = false): Promise<Cargo[]> 
 }
 
 export async function salvarCargo(dados: Partial<Cargo> & { id?: string | number }): Promise<Cargo> {
-  // Mantém o ID existente ou cria um novo
-  const idDoc = String(dados.id || Date.now());
+  const idDoc = dados.id ? String(dados.id) : doc(collection(db, 'cargos')).id;
 
   const cargoCompleto: Cargo = {
     id: idDoc,
@@ -48,8 +47,9 @@ export async function salvarCargo(dados: Partial<Cargo> & { id?: string | number
     if (idx >= 0) {
       cacheCargos[idx] = cargoCompleto;
     } else {
-      cacheCargos.unshift(cargoCompleto);
+      cacheCargos.push(cargoCompleto);
     }
+    cacheCargos.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   }
 
   return cargoCompleto;

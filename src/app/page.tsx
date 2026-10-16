@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { monitorarSessao } from '@/services/authService';
+import { useAuth } from '@/contexts/AuthContext';
 import { listarColaboradores } from '@/services/colaboradoresService';
 import { Colaborador } from '@/types/colaborador';
 import { Navbar } from '@/components/layout/Navbar';
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-// Tipos auxiliares para o painel
 interface AlertaExperiencia {
   colab: Colaborador;
   dataStr: string;
@@ -28,11 +27,10 @@ interface AlertaAniversario {
 
 export default function HomePage() {
   const router = useRouter();
-  const [usuarioEmail, setUsuarioEmail] = useState<string | null>(null);
+  const { user, carregando: authCarregando, filiaisPermitidas, podeVerTodasFiliais } = useAuth();
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const [carregandoDados, setCarregandoDados] = useState(true);
 
-  // Estado para armazenar os cálculos do painel
   const [painel, setPainel] = useState({
     total: 0,
     ativos: 0,
@@ -42,27 +40,39 @@ export default function HomePage() {
     nomeMesAtual: '',
   });
 
+  // Proteção de rota centralizada via useAuth
   useEffect(() => {
-    const unsubscribe = monitorarSessao(async (user) => {
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      setUsuarioEmail(user.email);
+    if (authCarregando) return;
+
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    let cancelado = false;
+
+    async function buscarDados() {
       try {
-        const dados = await listarColaboradores();
-        setColaboradores(dados);
+        const dados = await listarColaboradores(false, filiaisPermitidas, podeVerTodasFiliais);
+        if (!cancelado) {
+          setColaboradores(dados);
+        }
       } catch (err) {
         console.error('Erro ao carregar dados do dashboard:', err);
       } finally {
-        setCarregando(false);
+        if (!cancelado) {
+          setCarregandoDados(false);
+        }
       }
-    });
+    }
 
-    return () => unsubscribe();
-  }, [router]);
+    buscarDados();
 
-  // useEffect exclusivo para calcular datas e contagens no lado do cliente
+    return () => {
+      cancelado = true;
+    };
+  }, [user, authCarregando, router, filiaisPermitidas, podeVerTodasFiliais]);
+
   useEffect(() => {
     if (colaboradores.length === 0) return;
 
@@ -70,7 +80,7 @@ export default function HomePage() {
     hoje.setHours(0, 0, 0, 0);
 
     const limiteExp = new Date(hoje);
-    limiteExp.setDate(limiteExp.getDate() + 15); // Alerta com 15 dias de antecedência
+    limiteExp.setDate(limiteExp.getDate() + 15);
 
     const mesAtual = hoje.getMonth() + 1;
     const nomeMes = hoje.toLocaleString('pt-BR', { month: 'long' });
@@ -82,13 +92,11 @@ export default function HomePage() {
     const aniversariantes: AlertaAniversario[] = [];
 
     colaboradores.forEach((c) => {
-      // 1. Contagem Geral
       if (c.status === 'INATIVO') inativos++;
       else if (c.status === 'ATIVO') ativos++;
 
       if (c.status !== 'ATIVO') return;
 
-      // 2. Aniversariantes do Mês Atual
       if (c.data_nascimento) {
         const partes = c.data_nascimento.split('-');
         if (partes.length === 3) {
@@ -99,14 +107,12 @@ export default function HomePage() {
         }
       }
 
-      // 3. Prazos de Experiência
       const verificarExperiencia = (dataStr?: string | null, tipo?: string) => {
         if (!dataStr) return;
         const partes = dataStr.split('-');
         if (partes.length === 3) {
           const [a, m, d] = partes;
           const dataExp = new Date(Number(a), Number(m) - 1, Number(d));
-
           if (dataExp >= hoje && dataExp <= limiteExp) {
             const diffTime = dataExp.getTime() - hoje.getTime();
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -119,7 +125,6 @@ export default function HomePage() {
       verificarExperiencia(c.fim_experiencia_2, '2º Período (90d)');
     });
 
-    // Ordenação lógica
     aniversariantes.sort((a, b) => a.dia - b.dia);
     expVencendo.sort((a, b) => a.dias - b.dias);
 
@@ -143,7 +148,7 @@ export default function HomePage() {
     return dataIso;
   }
 
-  if (carregando) {
+  if (authCarregando || (!user && !authCarregando) || (user && carregandoDados)) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -153,11 +158,9 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Navbar usuarioEmail={usuarioEmail} />
+      <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        
-        {/* Cabeçalho */}
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Painel Geral</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -165,7 +168,6 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Grid de Métricas Principais */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <Card className="flex items-center gap-4 py-5">
             <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
@@ -198,14 +200,12 @@ export default function HomePage() {
           </Card>
         </div>
 
-        {/* Grid de Alertas e Acessos Rápidos */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Coluna Esquerda: Acessos */}
           <div className="space-y-4">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               Acesso Rápido
             </h2>
+
             <Link href="/colaboradores" className="group block">
               <Card className="hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between py-5">
                 <div>
@@ -215,6 +215,7 @@ export default function HomePage() {
                 <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
               </Card>
             </Link>
+
             <Link href="/cargos" className="group block">
               <Card className="hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between py-5">
                 <div>
@@ -226,11 +227,8 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Coluna Central: Alertas de Experiência */}
           <div className="lg:col-span-2 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              
-              {/* Card de Fim de Experiência */}
               <div className="flex flex-col gap-3">
                 <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <CalendarClock className="w-4 h-4 text-amber-500" />
@@ -265,7 +263,6 @@ export default function HomePage() {
                 </Card>
               </div>
 
-              {/* Card de Aniversariantes */}
               <div className="flex flex-col gap-3">
                 <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <Gift className="w-4 h-4 text-emerald-500" />
@@ -293,11 +290,9 @@ export default function HomePage() {
                   </div>
                 </Card>
               </div>
-
             </div>
           </div>
         </div>
-
       </main>
     </div>
   );

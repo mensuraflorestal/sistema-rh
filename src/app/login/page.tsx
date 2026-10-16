@@ -1,33 +1,47 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { loginComEmail } from '@/services/authService';
+import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const { user, carregando: authCarregando } = useAuth();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
-  const [carregando, setCarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    if (!authCarregando && user) {
+      window.location.replace('/');
+    }
+  }, [user, authCarregando]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro('');
-    setCarregando(true);
+    setSalvando(true);
 
     try {
       await loginComEmail(email, senha);
-      router.push('/');
+      window.location.replace('/');
     } catch {
       setErro('Credenciais inválidas. Verifique seu e-mail e senha.');
-    } finally {
-      setCarregando(false);
+      setSalvando(false);
     }
+  }
+
+  // Enquanto a sessão está a ser lida pelo IndexedDB, bloqueia o ecrã inteiro.
+  if (authCarregando || user) {
+    return (
+      <main className="min-h-screen w-full flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </main>
+    );
   }
 
   return (
@@ -77,7 +91,7 @@ export default function LoginPage() {
             required
           />
 
-          <Button type="submit" carregando={carregando} className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700">
+          <Button type="submit" carregando={salvando} className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700">
             Entrar no Sistema
           </Button>
         </form>

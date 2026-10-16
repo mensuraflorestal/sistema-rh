@@ -1,7 +1,11 @@
 import * as XLSX from 'xlsx';
 import { Colaborador } from '@/types/colaborador';
 
-export function exportarColaboradoresXLSX(colaboradores: Colaborador[], nomeArquivo = 'relatorio_colaboradores') {
+export function exportarColaboradoresXLSX(
+  colaboradores: Colaborador[],
+  nomeArquivo = 'relatorio_colaboradores',
+  podeVerSalario = false
+) {
   if (!colaboradores || colaboradores.length === 0) return;
 
   // Mapeia os campos internos para cabeçalhos
@@ -17,7 +21,7 @@ export function exportarColaboradoresXLSX(colaboradores: Colaborador[], nomeArqu
     'Equipe': c.equipe || '',
     'Data de Admissão': c.data_admissao || '',
     'Data de Demissão': c.data_demissao || '',
-    'Salário Base': c.salario ?? '',
+    'Salário Base': podeVerSalario ? (c.salario ?? '') : 'CONFIDENCIAL',
     'Jornada': c.jornada || '',
     'Telefone / Celular': c.celular || c.telefone || '',
     'E-mail': c.email || '',

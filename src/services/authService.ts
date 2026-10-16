@@ -11,6 +11,7 @@ import { UsuarioSistema } from '@/types/usuario';
 let usuarioCache: UsuarioSistema | null = null;
 
 export async function loginComEmail(email: string, pass: string) {
+  usuarioCache = null;
   return await signInWithEmailAndPassword(auth, email, pass);
 }
 
@@ -24,32 +25,38 @@ export async function obterPerfilAtual(user: User): Promise<UsuarioSistema | nul
     return usuarioCache;
   }
 
-  const docRef = doc(db, 'usuarios', user.uid);
-  const snap = await getDoc(docRef);
+  try {
+    const docRef = doc(db, 'usuarios', user.uid);
+    const snap = await getDoc(docRef);
 
-  if (snap.exists()) {
-    const dados = snap.data();
-    usuarioCache = {
-      uid: user.uid,
-      email: user.email || '',
-      nome: dados.nome || user.email || '',
-      role: dados.role || 'leitor',
-      ativo: dados.ativo ?? true,
-      filiais_permitidas: dados.filiais_permitidas || [],
-    };
-  } else {
-    // Se o utilizador autenticado não tiver documento, assume papel restrito
-    usuarioCache = {
-      uid: user.uid,
-      email: user.email || '',
-      nome: user.email || '',
-      role: 'leitor',
-      ativo: true,
-      filiais_permitidas: [],
-    };
+    if (snap.exists()) {
+      const dados = snap.data();
+      const estaAtivo = dados.ativo ?? false;
+
+      // Bloqueia se o usuário estiver explicitamente inativo
+      if (!estaAtivo) {
+        usuarioCache = null;
+        return null;
+      }
+
+      usuarioCache = {
+        uid: user.uid,
+        email: user.email || '',
+        nome: dados.nome || user.email || '',
+        role: dados.role || 'leitor', // Fallback seguro: role mínima se o campo estiver vazio
+        ativo: true,
+        filiais_permitidas: Array.isArray(dados.filiais_permitidas) ? dados.filiais_permitidas : [],
+      };
+      return usuarioCache;
+    }
+  } catch (err) {
+    console.error('Erro ao ler perfil do Firestore:', err);
+    throw err;
   }
 
-  return usuarioCache;
+  // Documento inexistente na coleção: zera cache e retorna null
+  usuarioCache = null;
+  return null;
 }
 
 export function monitorarSessaoComPerfil(
@@ -65,8 +72,7 @@ export function monitorarSessaoComPerfil(
     try {
       const perfil = await obterPerfilAtual(user);
       callback(user, perfil);
-    } catch (err) {
-      console.error('Erro ao procurar perfil do utilizador:', err);
+    } catch {
       callback(user, null);
     }
   });

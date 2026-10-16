@@ -148,7 +148,7 @@ export function FormColaboradorModal({
       funcao: cargo.nome,
       cbo: cargo.cbo || prev.cbo,
       jornada: cargo.jornada || prev.jornada,
-      salario: cargo.salario_base ?? prev.salario,
+      salario: podeVerSalario ? (cargo.salario_base ?? prev.salario) : prev.salario,
     }));
   }
 
@@ -196,11 +196,10 @@ export function FormColaboradorModal({
               type="button"
               key={id}
               onClick={() => setAbaAtiva(id as AbaForm)}
-              className={`flex items-center gap-1.5 py-3 px-3 border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-                abaAtiva === id
+              className={`flex items-center gap-1.5 py-3 px-3 border-b-2 whitespace-nowrap transition-colors cursor-pointer ${abaAtiva === id
                   ? 'border-emerald-600 text-emerald-700 font-semibold'
                   : 'border-transparent hover:text-slate-900'
-              }`}
+                }`}
             >
               <Icone className="w-3.5 h-3.5" />
               {rotulo}

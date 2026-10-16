@@ -1,12 +1,12 @@
 import { db } from './firebase';
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  setDoc, 
-  deleteField, 
-  query, 
-  where 
+import {
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  deleteField,
+  query,
+  where
 } from 'firebase/firestore';
 import { Colaborador } from '@/types/colaborador';
 import {
@@ -52,22 +52,17 @@ export async function listarColaboradores(
   const colecaoRef = collection(db, 'colaboradores');
   let q;
 
-  // Se o usuário puder ver todas ou tiver 'TODAS', consulta a coleção inteira
-  if (podeVerTodas || filiaisPermitidas.includes('TODAS')) {
+  // Se puder ver todas ou filiaisPermitidas estiver vazio (sem restrição), busca tudo
+  if (podeVerTodas || filiaisPermitidas.includes('TODAS') || filiaisPermitidas.length === 0) {
     q = colecaoRef;
-  } else if (filiaisPermitidas.length > 0) {
-    // Busca no Firestore apenas documentos onde matriz_filial esteja no array de permissões
-    // O operador 'in' aceita até 30 valores no Firestore
-    q = query(colecaoRef, where('matriz_filial', 'in', filiaisPermitidas));
   } else {
-    // Sem filial permitida cadastrada: não consome leituras desnecessárias
-    cacheColaboradores = [];
-    ultimaSincronizacao = new Date();
-    return [];
+    // Restrito às filiais atribuídas
+    q = query(colecaoRef, where('matriz_filial', 'in', filiaisPermitidas));
   }
 
   const snapshot = await getDocs(q);
   const lista = snapshot.docs.map((d) => mapearColaborador(d.id, d.data()));
+
   lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   cacheColaboradores = lista;
@@ -76,8 +71,8 @@ export async function listarColaboradores(
 }
 
 export async function salvarColaborador(dados: Partial<Colaborador> & { id?: string | number }): Promise<Colaborador> {
-  const idDocumento = String(dados.id || Date.now());
-  const lista = await listarColaboradores();
+  const idDocumento = dados.id ? String(dados.id) : doc(collection(db, 'colaboradores')).id;
+  const lista = await listarColaboradores(false, [], true);
   const existente = lista.find((c) => String(c.id) === idDocumento) || ({} as Partial<Colaborador>);
   const isNovo = !existente.id;
 
@@ -116,6 +111,10 @@ export async function salvarColaborador(dados: Partial<Colaborador> & { id?: str
   if (!colaboradorMesclado.cargo_id) {
     dadosParaFirestore.cargo_id = deleteField();
   }
+  if (colaboradorMesclado.status === 'ATIVO') {
+    dadosParaFirestore.data_demissao = deleteField();
+    dadosParaFirestore.motivo_demissao = deleteField();
+  }
 
   const docRef = doc(db, 'colaboradores', idDocumento);
   await setDoc(docRef, dadosParaFirestore, { merge: true });
@@ -125,8 +124,10 @@ export async function salvarColaborador(dados: Partial<Colaborador> & { id?: str
     if (index >= 0) {
       cacheColaboradores[index] = colaboradorMesclado;
     } else {
-      cacheColaboradores.unshift(colaboradorMesclado);
+      cacheColaboradores.push(colaboradorMesclado);
     }
+    // Garante ordem alfabética sem precisar bater no Firestore de novo
+    cacheColaboradores.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   }
 
   return colaboradorMesclado;

@@ -23,7 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   temPermissao: () => false,
   temAcessoFilial: () => false,
-  podeVerTodasFiliais: false,
+  podeVerTodasFiliais: true,
   filiaisPermitidas: [],
 });
 
@@ -33,13 +33,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
+    let montado = true;
+
     const unsubscribe = monitorarSessaoComPerfil((currentUser, currentPerfil) => {
+      if (!montado) return;
       setUser(currentUser);
       setPerfil(currentPerfil);
       setCarregando(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      montado = false;
+      unsubscribe();
+    };
   }, []);
 
   const logout = async () => {
@@ -55,9 +61,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const filiaisPermitidas = perfil?.filiais_permitidas || [];
 
+  // Se tiver filiais cadastradas e NÃO tiver 'TODAS', fica restrito.
+  // Se for admin ou não tiver restrições configuradas, vê tudo.
   const podeVerTodasFiliais = Boolean(
     perfil?.role === 'admin' ||
-    filiaisPermitidas.includes('TODAS')
+    filiaisPermitidas.includes('TODAS') ||
+    filiaisPermitidas.length === 0
   );
 
   const temAcessoFilial = (filial: string) => {

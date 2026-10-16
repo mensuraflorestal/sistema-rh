@@ -20,7 +20,14 @@ const ITENS_POR_PAGINA = 15;
 
 export default function ColaboradoresPage() {
   const router = useRouter();
-  const { user, carregando: authCarregando, temPermissao, podeVerTodasFiliais, filiaisPermitidas } = useAuth();
+  const {
+    user,
+    perfil,
+    carregando: authCarregando,
+    temPermissao,
+    podeVerTodasFiliais,
+    filiaisPermitidas
+  } = useAuth();
   const podeEditar = temPermissao(['admin', 'rh_gestor']);
 
   const [todos, setTodos] = useState<Colaborador[]>([]);
@@ -54,24 +61,24 @@ export default function ColaboradoresPage() {
   useEffect(() => {
     if (authCarregando) return;
     if (!user) {
-      router.push('/login');
+      router.replace('/login');
       return;
     }
+    if (!perfil) return;
 
     sincronizarDados(false);
-  }, [user, authCarregando, router, sincronizarDados]);
+  }, [user, perfil, authCarregando, router, sincronizarDados]);
 
   useEffect(() => {
-    const INTERVALO_MS = 15 * 60 * 1000;
-
+    const INTERVALO_MS = 60 * 60 * 1000;
     const intervalo = setInterval(() => {
-      if (document.visibilityState === 'visible' && user) {
+      if (document.visibilityState === 'visible' && user && perfil) {
         sincronizarDados(true, false);
       }
     }, INTERVALO_MS);
 
     return () => clearInterval(intervalo);
-  }, [user, sincronizarDados]);
+  }, [user, perfil, sincronizarDados]);
 
   async function lidarComSalvar(dados: Colaborador) {
     const salvo = await salvarColaborador(dados);
@@ -96,6 +103,12 @@ export default function ColaboradoresPage() {
 
   const filtrados = useMemo(() => {
     return todos.filter((c) => {
+      if (!podeVerTodasFiliais) {
+        if (!c.matriz_filial || !filiaisPermitidas.includes(c.matriz_filial)) {
+          return false;
+        }
+      }
+
       const matchStatus =
         filtroStatus === 'TODOS' || normalizarStatus(c.status) === filtroStatus;
       const termo = busca.toLowerCase();
@@ -107,7 +120,7 @@ export default function ColaboradoresPage() {
 
       return matchStatus && matchBusca;
     });
-  }, [todos, busca, filtroStatus]);
+  }, [todos, busca, filtroStatus, podeVerTodasFiliais, filiaisPermitidas]);
 
   async function lidarComAlteracaoStatus(dadosAtualizados: Partial<Colaborador>) {
     if (!colabMudarStatus) return;
@@ -137,6 +150,14 @@ export default function ColaboradoresPage() {
     const inicio = (pagina - 1) * ITENS_POR_PAGINA;
     return filtrados.slice(inicio, inicio + ITENS_POR_PAGINA);
   }, [filtrados, pagina]);
+
+  if (authCarregando || !user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -179,7 +200,7 @@ export default function ColaboradoresPage() {
           status={filtroStatus}
           onStatusChange={setFiltroStatus}
           totalFiltrados={filtrados.length}
-          aoExportarExcel={() => exportarColaboradoresXLSX(filtrados, 'relatorio_rs_florestal')}
+          aoExportarExcel={() => exportarColaboradoresXLSX(filtrados, 'relatorio_rs_florestal', podeEditar)}
         />
 
         {carregando ? (

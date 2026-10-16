@@ -27,6 +27,16 @@ export function Navbar() {
     }
   };
 
+  const lidarComLogout = async () => {
+    try {
+      await logout();
+      window.location.replace('/login');
+    } catch (err) {
+      console.error('Erro ao encerrar sessão:', err);
+      window.location.replace('/login');
+    }
+  };
+
   return (
     <nav className="bg-white border-b border-slate-200 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -76,8 +86,8 @@ export function Navbar() {
             )}
             
             <button
-              onClick={() => logout()}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              onClick={lidarComLogout}
+              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
             >
               Sair
             </button>
