@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Usuário com documento em /usuarios e ativo == true
+    function ativo() {
+      return logado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && perfil().ativo == true;
+    }
+
+    function isAdmin() { return ativo() && perfil().role == 'admin'; }
+    function isRH() { return ativo() && perfil().role in ['admin', 'rh_gestor']; }
+
+    // Admin ou 'TODAS' veem tudo; demais, apenas filiais atribuídas
+    function filialOk(filial) {
+      return isAdmin()
+        || perfil().filiais_permitidas.hasAny(['TODAS'])
+        || filial in perfil().filiais_permitidas;
+    }
+
+    match /usuarios/{uid} {
+      allow read: if ativo() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /colaboradores/{id} {
+      allow read: if ativo() && filialOk(resource.data.matriz_filial);
+      allow create: if isRH() && filialOk(request.resource.data.matriz_filial);
+      allow update: if isRH()
+        && filialOk(resource.data.matriz_filial)
+        && filialOk(request.resource.data.matriz_filial);
+      allow delete: if isAdmin();
+
+      // Salário e dados bancários: somente admin e rh_gestor, e dentro das filiais permitidas
+      match /privado/{docPrivado} {
+        allow read, write: if isAdmin()
+          || (isRH()
+            && filialOk(get(/databases/$(database)/documents/colaboradores/$(id)).data.matriz_filial));
+      }
+    }
+
+    // Tabela de cargos contém salário base: restrita à gestão
+    match /cargos/{id} {
+      allow read: if isRH();
+      allow write: if isAdmin();
+    }
+
+    match /configuracoes/{id} {
+      allow read: if ativo();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

@@ -17,16 +17,20 @@ export default function ParametrosPage() {
   const [parametros, setParametros] = useState<Parametros>({ filiais: [], grupos: [], equipas: [] });
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [erroCarga, setErroCarga] = useState('');
   const [novoItem, setNovoItem] = useState<{ [key in Categoria]: string }>({ filiais: '', grupos: '', equipas: '' });
 
   useEffect(() => {
     const unsubscribe = monitorarSessao(async (user) => {
       if (!user) return router.push('/login');
       try {
-        const dados = await obterParametros();
+        const dados = await obterParametros(true);
         setParametros(dados);
+        setErroCarga('');
       } catch (err) {
         console.error('Erro ao carregar parâmetros:', err);
+        const codigo = (err as { code?: string })?.code || 'desconhecido';
+        setErroCarga(`Não foi possível carregar os parâmetros (erro: ${codigo}). As listas podem estar incompletas; não salve antes de resolver.`);
       } finally {
         setCarregando(false);
       }
@@ -94,6 +98,12 @@ export default function ParametrosPage() {
             Guardar Alterações
           </Button>
         </div>
+
+        {erroCarga && (
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {erroCarga}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {paineis.map(({ id, titulo, icone: Icone, desc }) => (

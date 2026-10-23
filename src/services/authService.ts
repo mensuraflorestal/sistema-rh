@@ -33,7 +33,7 @@ export async function obterPerfilAtual(user: User): Promise<UsuarioSistema | nul
       const dados = snap.data();
       const estaAtivo = dados.ativo ?? false;
 
-      // Bloqueia se o usuário estiver explicitamente inativo
+      // Bloqueia se o usuário estiver inativo ou sem o campo 'ativo' definido
       if (!estaAtivo) {
         usuarioCache = null;
         return null;

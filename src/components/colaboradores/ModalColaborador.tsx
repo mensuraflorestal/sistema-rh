@@ -12,9 +12,12 @@ import {
   CreditCard,
   ShieldCheck,
   Calendar,
-  DollarSign
+  DollarSign,
+  Printer
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { obterFinanceiro, DadosFinanceiros } from '@/services/financeiroService';
+import { imprimirFichaColaborador } from '@/services/impressaoFichaService';
 
 interface ModalColaboradorProps {
   colaborador: Colaborador | null;
@@ -38,12 +41,15 @@ function fmtCPF(cpf?: string) {
 
 type Aba = 'contrato' | 'pessoal' | 'documentos' | 'endereco' | 'banco' | 'saude_epis';
 
-export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatus }: ModalColaboradorProps) {
+export function ModalColaborador({ colaborador: colaboradorBase, aoFechar, aoEditar, aoMudarStatus }: ModalColaboradorProps) {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('contrato');
-
+  const [financeiro, setFinanceiro] = useState<DadosFinanceiros>({});
+  const [erroFinanceiro, setErroFinanceiro] = useState(false);
 
   const { temPermissao } = useAuth();
+  // Salário e dados bancários: somente admin e rh_gestor
   const podeVerSalario = temPermissao(['admin', 'rh_gestor']);
+  const podeVerBanco = podeVerSalario;
   const podeEditar = temPermissao(['admin', 'rh_gestor']);
 
   useEffect(() => {
@@ -54,7 +60,37 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [aoFechar]);
 
-  if (!colaborador) return null;
+  const idColaborador = colaboradorBase ? String(colaboradorBase.id) : null;
+
+  // Ao trocar de colaborador, volta para a primeira aba e descarta o financeiro anterior
+  useEffect(() => {
+    setAbaAtiva('contrato');
+    setFinanceiro({});
+  }, [idColaborador]);
+
+  // Recarrega também quando o cadastro é salvo (nova referência do colaborador)
+  useEffect(() => {
+    setErroFinanceiro(false);
+    if (!idColaborador || !podeVerSalario) return;
+
+    let cancelado = false;
+    obterFinanceiro(idColaborador)
+      .then((dados) => {
+        if (!cancelado) setFinanceiro(dados);
+      })
+      .catch((err) => {
+        console.error('Erro ao carregar dados financeiros:', err);
+        if (!cancelado) setErroFinanceiro(true);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [idColaborador, colaboradorBase, podeVerSalario]);
+
+  if (!colaboradorBase) return null;
+
+  const colaborador: Colaborador = { ...colaboradorBase, ...financeiro };
 
   return (
     <div
@@ -99,7 +135,7 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
             { id: 'endereco', rotulo: 'Endereço & Contato', icone: MapPin },
             { id: 'banco', rotulo: 'Bancário', icone: CreditCard },
             { id: 'saude_epis', rotulo: 'Saúde & EPIs', icone: ShieldCheck },
-          ].map(({ id, rotulo, icone: Icone }) => (
+          ].filter(({ id }) => id !== 'banco' || podeVerBanco).map(({ id, rotulo, icone: Icone }) => (
             <button
               key={id}
               onClick={() => setAbaAtiva(id as Aba)}
@@ -163,11 +199,15 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
               <div>
                 <span className="text-xs text-slate-500 font-medium block">Remuneração Base</span>
                 {podeVerSalario ? (
-                  <span className="text-sm font-semibold text-emerald-700">
-                    {colaborador.salario
-                      ? colaborador.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                      : '-'}
-                  </span>
+                  erroFinanceiro ? (
+                    <span className="text-xs text-red-600">Não foi possível carregar</span>
+                  ) : (
+                    <span className="text-sm font-semibold text-emerald-700">
+                      {colaborador.salario
+                        ? colaborador.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : '-'}
+                    </span>
+                  )
                 ) : (
                   <span className="text-xs text-slate-400 italic">
                     Restrito à gestão
@@ -318,7 +358,7 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
             </div>
           )}
 
-          {abaAtiva === 'banco' && (
+          {abaAtiva === 'banco' && podeVerBanco && (
             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div>
                 <span className="text-xs text-slate-500 block">Instituição Bancária</span>
@@ -416,12 +456,22 @@ export function ModalColaborador({ colaborador, aoFechar, aoEditar, aoMudarStatu
             )}
           </div>
 
-          <button
-            onClick={aoFechar}
-            className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            Fechar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => imprimirFichaColaborador(colaborador, financeiro, podeVerSalario)}
+              className="px-3 py-2 text-xs font-semibold rounded-lg border border-teal-300 bg-teal-50 text-teal-800 hover:bg-teal-100 flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Gerar ficha cadastral para a contabilidade em PDF"
+            >
+              <Printer className="w-4 h-4 text-teal-700" />
+              Salvar PDF / Imprimir
+            </button>
+            <button
+              onClick={aoFechar}
+              className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
         </div>
       </div>
     </div>

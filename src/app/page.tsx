@@ -30,6 +30,7 @@ export default function HomePage() {
   const { user, carregando: authCarregando, filiaisPermitidas, podeVerTodasFiliais } = useAuth();
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [carregandoDados, setCarregandoDados] = useState(true);
+  const [erroCarga, setErroCarga] = useState('');
 
   const [painel, setPainel] = useState({
     total: 0,
@@ -59,6 +60,9 @@ export default function HomePage() {
         }
       } catch (err) {
         console.error('Erro ao carregar dados do dashboard:', err);
+        if (!cancelado) {
+          setErroCarga('Não foi possível carregar os dados do painel. Verifique sua conexão ou permissões.');
+        }
       } finally {
         if (!cancelado) {
           setCarregandoDados(false);
@@ -167,6 +171,12 @@ export default function HomePage() {
             Visão consolidada do efetivo da RS Florestal
           </p>
         </div>
+
+        {erroCarga && (
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {erroCarga}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <Card className="flex items-center gap-4 py-5">

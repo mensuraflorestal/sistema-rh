@@ -15,6 +15,7 @@ import {
 } from '@/lib/colaborador';
 import { ErroCadastroColaborador } from '@/services/colaboradoresService';
 import { obterParametros, Parametros } from '@/services/parametrosService';
+import { obterFinanceiro } from '@/services/financeiroService';
 import { useAuth } from '@/contexts/AuthContext';
 
 const classeSelect =
@@ -67,6 +68,21 @@ export function FormColaboradorModal({
     }
 
     let cancelado = false;
+
+    if (colaboradorParaEditar && podeVerSalario) {
+      obterFinanceiro(String(colaboradorParaEditar.id))
+        .then((fin) => {
+          // O que já foi digitado no formulário tem prioridade sobre o carregado
+          if (!cancelado) setForm((prev) => ({ ...fin, ...prev }));
+        })
+        .catch((err) => {
+          console.error('Erro ao carregar dados financeiros:', err);
+          if (!cancelado) {
+            setErro('Não foi possível carregar salário e dados bancários. Os campos financeiros não serão alterados ao salvar.');
+          }
+        });
+    }
+
     listarCargos()
       .then((lista) => {
         if (cancelado) return;
@@ -191,7 +207,7 @@ export function FormColaboradorModal({
             { id: 'endereco', rotulo: 'Endereço', icone: MapPin },
             { id: 'banco', rotulo: 'Bancário', icone: CreditCard },
             { id: 'saude_epis', rotulo: 'Saúde & EPIs', icone: ShieldCheck },
-          ].map(({ id, rotulo, icone: Icone }) => (
+          ].filter(({ id }) => id !== 'banco' || podeVerSalario).map(({ id, rotulo, icone: Icone }) => (
             <button
               type="button"
               key={id}
@@ -596,7 +612,7 @@ export function FormColaboradorModal({
               </div>
             )}
 
-            {abaAtiva === 'banco' && (
+            {abaAtiva === 'banco' && podeVerSalario && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Banco"

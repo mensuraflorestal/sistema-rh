@@ -94,6 +94,24 @@ export function Navbar() {
           </div>
         </div>
       </div>
+      <div className="sm:hidden flex gap-1 overflow-x-auto px-4 pb-2">
+        {links.map((link) => {
+          const ativo = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`whitespace-nowrap px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                ativo
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              {link.label}
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

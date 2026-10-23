@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { listarColaboradores, salvarColaborador } from '@/services/colaboradoresService';
 import { Colaborador } from '@/types/colaborador';
-import { normalizarStatus } from '@/lib/colaborador';
+import { normalizarCpf, normalizarStatus } from '@/lib/colaborador';
 import { Navbar } from '@/components/layout/Navbar';
 import { FiltrosColaboradores } from '@/components/colaboradores/FiltrosColaboradores';
 import { TabelaColaboradores } from '@/components/colaboradores/TabelaColaboradores';
@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { ModalColaborador } from '@/components/colaboradores/ModalColaborador';
 import { FormColaboradorModal } from '@/components/colaboradores/FormColaboradorModal';
 import { exportarColaboradoresXLSX } from '@/services/excelService';
+import { obterFinanceiroEmLote } from '@/services/financeiroService';
 import { ModalStatusRapido } from '@/components/colaboradores/ModalStatusRapido';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -39,6 +40,7 @@ export default function ColaboradoresPage() {
   const [colaboradorEditando, setColaboradorEditando] = useState<Colaborador | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [ultimaSinc, setUltimaSinc] = useState<string>('');
+  const [erroCarga, setErroCarga] = useState('');
 
   const [colaboradorSelecionado, setColaboradorSelecionado] = useState<Colaborador | null>(null);
   const [colabMudarStatus, setColabMudarStatus] = useState<Colaborador | null>(null);
@@ -48,10 +50,12 @@ export default function ColaboradoresPage() {
     try {
       const dados = await listarColaboradores(forcarRemoto, filiaisPermitidas, podeVerTodasFiliais);
       setTodos(dados);
+      setErroCarga('');
       const agora = new Date();
       setUltimaSinc(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Erro ao sincronizar colaboradores:', err);
+      setErroCarga('Não foi possível carregar os colaboradores. Verifique sua conexão ou permissões e tente sincronizar novamente.');
     } finally {
       if (mostrarLoading) setSincronizando(false);
       setCarregando(false);
@@ -81,7 +85,11 @@ export default function ColaboradoresPage() {
   }, [user, perfil, sincronizarDados]);
 
   async function lidarComSalvar(dados: Colaborador) {
-    const salvo = await salvarColaborador(dados);
+    const salvo = await salvarColaborador(dados, {
+      filiaisPermitidas,
+      podeVerTodas: podeVerTodasFiliais,
+      podeVerFinanceiro: podeEditar,
+    });
 
     setTodos((atuais) => {
       const idx = atuais.findIndex((c) => String(c.id) === String(salvo.id));
@@ -111,24 +119,42 @@ export default function ColaboradoresPage() {
 
       const matchStatus =
         filtroStatus === 'TODOS' || normalizarStatus(c.status) === filtroStatus;
-      const termo = busca.toLowerCase();
+      const termo = busca.toLowerCase().trim();
+      const termoDigitos = normalizarCpf(termo);
       const matchBusca =
         !termo ||
         c.nome.toLowerCase().includes(termo) ||
         c.cpf?.includes(termo) ||
+        (termoDigitos.length > 0 && normalizarCpf(c.cpf).includes(termoDigitos)) ||
         c.registro?.toLowerCase().includes(termo);
 
       return matchStatus && matchBusca;
     });
   }, [todos, busca, filtroStatus, podeVerTodasFiliais, filiaisPermitidas]);
 
+  async function lidarComExportacao() {
+    try {
+      // Salário e dados bancários só entram para admin/rh_gestor
+      const financeiro = podeEditar
+        ? await obterFinanceiroEmLote(filtrados.map((c) => c.id))
+        : null;
+      exportarColaboradoresXLSX(filtrados, 'relatorio_rs_florestal', financeiro);
+    } catch (err) {
+      console.error('Erro ao exportar colaboradores:', err);
+      setErroCarga('Não foi possível gerar a planilha. Verifique sua conexão ou permissões e tente novamente.');
+    }
+  }
+
   async function lidarComAlteracaoStatus(dadosAtualizados: Partial<Colaborador>) {
     if (!colabMudarStatus) return;
 
-    const atualizado = await salvarColaborador({
-      id: colabMudarStatus.id,
-      ...dadosAtualizados,
-    });
+    const atualizado = await salvarColaborador(
+      {
+        id: colabMudarStatus.id,
+        ...dadosAtualizados,
+      },
+      { filiaisPermitidas, podeVerTodas: podeVerTodasFiliais, podeVerFinanceiro: podeEditar }
+    );
 
     setTodos((atuais) =>
       atuais.map((c) => (String(c.id) === String(atualizado.id) ? atualizado : c))
@@ -194,13 +220,19 @@ export default function ColaboradoresPage() {
           </div>
         </div>
 
+        {erroCarga && (
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {erroCarga}
+          </div>
+        )}
+
         <FiltrosColaboradores
           busca={busca}
           onBuscaChange={setBusca}
           status={filtroStatus}
           onStatusChange={setFiltroStatus}
           totalFiltrados={filtrados.length}
-          aoExportarExcel={() => exportarColaboradoresXLSX(filtrados, 'relatorio_rs_florestal', podeEditar)}
+          aoExportarExcel={lidarComExportacao}
         />
 
         {carregando ? (

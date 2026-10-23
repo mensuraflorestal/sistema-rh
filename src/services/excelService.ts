@@ -1,41 +1,55 @@
 import * as XLSX from 'xlsx';
 import { Colaborador } from '@/types/colaborador';
+import { DadosFinanceiros } from './financeiroService';
 
+/**
+ * @param financeiro Dados financeiros por id de colaborador. Informe somente para
+ * quem pode vê-los (admin/rh_gestor); sem ele, as colunas de salário e dados
+ * bancários nem entram na planilha.
+ */
 export function exportarColaboradoresXLSX(
   colaboradores: Colaborador[],
   nomeArquivo = 'relatorio_colaboradores',
-  podeVerSalario = false
+  financeiro: Map<string, DadosFinanceiros> | null = null
 ) {
   if (!colaboradores || colaboradores.length === 0) return;
 
   // Mapeia os campos internos para cabeçalhos
-  const dadosPlanilha = colaboradores.map((c) => ({
-    'Registro': c.registro || '',
-    'Nome Completo': c.nome || '',
-    'CPF': c.cpf || '',
-    'Status': c.status || '',
-    'Função': c.funcao || '',
-    'CBO': c.cbo || '',
-    'Unidade / Filial': c.matriz_filial || '',
-    'Grupo Operacional': c.grupo || '',
-    'Equipe': c.equipe || '',
-    'Data de Admissão': c.data_admissao || '',
-    'Data de Demissão': c.data_demissao || '',
-    'Salário Base': podeVerSalario ? (c.salario ?? '') : 'CONFIDENCIAL',
-    'Jornada': c.jornada || '',
-    'Telefone / Celular': c.celular || c.telefone || '',
-    'E-mail': c.email || '',
-    'Cidade': c.cidade || '',
-    'UF': c.uf_endereco || '',
-    'Banco': c.banco || '',
-    'Agência': c.agencia || '',
-    'Conta': c.numero_conta || '',
-    'Chave PIX': c.chave_pix || '',
-    'Camiseta': c.camiseta || '',
-    'Calça': c.calca || '',
-    'Sapato': c.sapato || '',
-    'Jaqueta': c.jaqueta || '',
-  }));
+  const dadosPlanilha = colaboradores.map((c) => {
+    const fin = financeiro?.get(String(c.id));
+
+    return {
+      'Registro': c.registro || '',
+      'Nome Completo': c.nome || '',
+      'CPF': c.cpf || '',
+      'Status': c.status || '',
+      'Função': c.funcao || '',
+      'CBO': c.cbo || '',
+      'Unidade / Filial': c.matriz_filial || '',
+      'Grupo Operacional': c.grupo || '',
+      'Equipe': c.equipe || '',
+      'Data de Admissão': c.data_admissao || '',
+      'Data de Demissão': c.data_demissao || '',
+      ...(financeiro ? { 'Salário Base': fin?.salario ?? '' } : {}),
+      'Jornada': c.jornada || '',
+      'Telefone / Celular': c.celular || c.telefone || '',
+      'E-mail': c.email || '',
+      'Cidade': c.cidade || '',
+      'UF': c.uf_endereco || '',
+      ...(financeiro
+        ? {
+            'Banco': fin?.banco || '',
+            'Agência': fin?.agencia || '',
+            'Conta': fin?.numero_conta || '',
+            'Chave PIX': fin?.chave_pix || '',
+          }
+        : {}),
+      'Camiseta': c.camiseta || '',
+      'Calça': c.calca || '',
+      'Sapato': c.sapato || '',
+      'Jaqueta': c.jaqueta || '',
+    };
+  });
 
   const worksheet = XLSX.utils.json_to_sheet(dadosPlanilha);
   const workbook = XLSX.utils.book_new();

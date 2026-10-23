@@ -1,9 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import { UsuarioSistema, PerfilUsuario } from '@/types/usuario';
 import { monitorarSessaoComPerfil, logout as authLogout } from '@/services/authService';
+import { limparCacheColaboradores } from '@/services/colaboradoresService';
 
 interface AuthContextType {
   user: User | null;
@@ -23,7 +24,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   temPermissao: () => false,
   temAcessoFilial: () => false,
-  podeVerTodasFiliais: true,
+  podeVerTodasFiliais: false,
   filiaisPermitidas: [],
 });
 
@@ -32,11 +33,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [perfil, setPerfil] = useState<UsuarioSistema | null>(null);
   const [carregando, setCarregando] = useState(true);
 
+  const uidAnterior = useRef<string | null>(null);
+
   useEffect(() => {
     let montado = true;
 
     const unsubscribe = monitorarSessaoComPerfil((currentUser, currentPerfil) => {
       if (!montado) return;
+      const uidAtual = currentUser?.uid ?? null;
+      if (uidAtual !== uidAnterior.current) {
+        limparCacheColaboradores();
+        uidAnterior.current = uidAtual;
+      }
       setUser(currentUser);
       setPerfil(currentPerfil);
       setCarregando(false);
@@ -49,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = async () => {
+    limparCacheColaboradores();
     await authLogout();
     setUser(null);
     setPerfil(null);
@@ -59,14 +68,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return perfisPermitidos.includes(perfil.role);
   };
 
-  const filiaisPermitidas = perfil?.filiais_permitidas || [];
+  // Referência estável: evita refazer efeitos dependentes a cada render
+  const filiaisPermitidas = useMemo(
+    () => perfil?.filiais_permitidas || [],
+    [perfil]
+  );
 
-  // Se tiver filiais cadastradas e NÃO tiver 'TODAS', fica restrito.
-  // Se for admin ou não tiver restrições configuradas, vê tudo.
+  // Negação por padrão: só vê tudo quem é admin ou tem 'TODAS'.
+  // Sem filiais atribuídas, o usuário não vê nenhum colaborador.
   const podeVerTodasFiliais = Boolean(
-    perfil?.role === 'admin' ||
-    filiaisPermitidas.includes('TODAS') ||
-    filiaisPermitidas.length === 0
+    perfil?.role === 'admin' || filiaisPermitidas.includes('TODAS')
   );
 
   const temAcessoFilial = (filial: string) => {
