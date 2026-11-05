@@ -2,6 +2,13 @@ import * as XLSX from 'xlsx';
 import { Colaborador } from '@/types/colaborador';
 import { DadosFinanceiros } from './financeiroService';
 
+function formatarDataBR(data?: string | null): string {
+  if (!data) return '';
+  const limpa = data.split('T')[0];
+  const [a, m, d] = limpa.split('-');
+  return a && m && d ? `${d}/${m}/${a}` : data;
+}
+
 /**
  * @param financeiro Dados financeiros por id de colaborador. Informe somente para
  * quem pode vê-los (admin/rh_gestor); sem ele, as colunas de salário e dados
@@ -22,14 +29,14 @@ export function exportarColaboradoresXLSX(
       'Registro': c.registro || '',
       'Nome Completo': c.nome || '',
       'CPF': c.cpf || '',
-      'Data de Nascimento': c.data_nascimento || '',
+      'Data de Nascimento': formatarDataBR(c.data_nascimento),
       'Status': c.status || '',
       'Função': c.funcao || '',
       'CBO': c.cbo || '',
       'Unidade / Filial': c.matriz_filial || '',
       'Grupo Operacional': c.grupo || '',
-      'Data de Admissão': c.data_admissao || '',
-      'Data de Demissão': c.data_demissao || '',
+      'Data de Admissão': formatarDataBR(c.data_admissao),
+      'Data de Demissão': formatarDataBR(c.data_demissao),
       ...(financeiro ? { 'Salário Base': fin?.salario ?? '' } : {}),
       'Telefone / Celular': c.celular || c.telefone || '',
       'E-mail': c.email || '',
